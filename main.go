@@ -53,7 +53,7 @@ func sendNSPList(l NSPList, epOut *gousb.OutEndpoint) {
 	copy(buf, strings.Repeat("\x00", 0x8)) // Padding
 	epOut.Write(buf)
 
-	fmt.Printf("Sending NSP list: %v", l)
+	fmt.Printf("Sending NSP list: %v\n", l.Paths)
 
 	for _, path := range l.Paths {
 		buf = make([]byte, len(path))
