@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/gousb"
+	"github.com/karalabe/hid"
 )
 
 const (
@@ -170,7 +171,7 @@ func getInOutEndpoints(intf *gousb.Interface) (in *gousb.InEndpoint, out *gousb.
 // getNSPListFromDirectory list NSPs in a directory and its subdirectories.
 func getNSPListFromDirectory(d string) []string {
 	if _, err := os.Stat(d); os.IsNotExist(err) {
-		log.Fatal("NSP directory does not exist")
+		log.Fatal("NSP directory/file does not exist")
 	}
 
 	var files []string
@@ -191,18 +192,14 @@ func getNSPListFromDirectory(d string) []string {
 }
 
 func main() {
+	for _, info := range hid.Enumerate(0x057E, 0) {
+		fmt.Println(info)
+	}
 	// Check args and verify path is valid
 	if len(os.Args) > 2 {
 		log.Fatalf("too many arguments: %d", len(os.Args))
 	}
 	dir := os.Args[1]
-	dirStat, err := os.Stat(dir)
-	if err != nil {
-		log.Fatalf("directory does not exist: %s", dir)
-	}
-	if !dirStat.IsDir() {
-		log.Fatalf("supplied path is not a directory: %s", dir)
-	}
 
 	// Initialize a new Context for Switch USB device
 	ctx := gousb.NewContext()
