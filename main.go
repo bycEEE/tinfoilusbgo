@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/google/gousb"
+	"github.com/schollz/progressbar/v2"
 )
 
 const (
@@ -80,8 +81,8 @@ func sendNSPFiles(l NSPList, epIn *gousb.InEndpoint, epOut *gousb.OutEndpoint, d
 	}
 	nspName := string(buf)
 	buf = buf[:0] // reset buffer (might be unneeded, left over from resolving previous issues)
-	fmt.Printf("Range size: %d, Range offset: %d, Name length: %d, Name: %s\n",
-		rangeSize, rangeOffset, nspNameLength, nspName)
+	// fmt.Printf("Range size: %d, Range offset: %d, Name length: %d, Name: %s\n",
+	// rangeSize, rangeOffset, nspNameLength, nspName)
 
 	// Response headers
 	epOut.Write([]byte("TUC0")) // Tinfoil USB Command 0
@@ -105,8 +106,12 @@ func sendNSPFiles(l NSPList, epIn *gousb.InEndpoint, epOut *gousb.OutEndpoint, d
 	copy(buf, strings.Repeat("\x00", 0xC))
 	epOut.Write(buf)
 
-	// Open file
+	// Open file and create progress bar
 	file, err := os.Open(nspName)
+	stat, _ := file.Stat()
+	fmt.Printf("Sending file: %s (%d bytes), Range size: %d, Range offset: %d",
+		stat.Name(), stat.Size(), rangeSize, rangeOffset)
+	progressBar := progressbar.New(int(stat.Size()))
 	defer file.Close()
 	if err != nil {
 		log.Fatalf("Error reading NSP file: %v", err)
@@ -123,7 +128,10 @@ func sendNSPFiles(l NSPList, epIn *gousb.InEndpoint, epOut *gousb.OutEndpoint, d
 		file.Read(buf)
 		epOut.Write(buf)
 		currOffset += readSize
+		progressBar.Add(int(readSize))
 	}
+	progressBar.Finish()
+	fmt.Println("")
 }
 
 // sendNSPFilesPoll wraps around sendNSPFiles and keeps the connection open.
@@ -138,11 +146,11 @@ func sendNSPFilesPoll(l NSPList, epIn *gousb.InEndpoint, epOut *gousb.OutEndpoin
 		if !bytes.Equal(magic, []byte("TUC0")) {
 			continue
 		}
-		cmdType := buf[4:5]
+		// cmdType := buf[4:5]
 		cmdID := binary.LittleEndian.Uint32(buf[8:12])
 		dataSize := binary.LittleEndian.Uint64(buf[12:20])
 		buf = buf[:0] // reset buffer (might be unneeded, left over from resolving previous issues)
-		fmt.Printf("Cmd type: %d, Command ID: %d, Data size: %d\n", cmdType, cmdID, dataSize)
+		// fmt.Printf("Cmd type: %d, Command ID: %d, Data size: %d\n", cmdType, cmdID, dataSize)
 		if cmdID == cmdIDExit {
 			fmt.Println("Finished transfer, exiting")
 			os.Exit(0)
