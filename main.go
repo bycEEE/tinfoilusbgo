@@ -40,7 +40,7 @@ func buildNSPList(f []string) (l NSPList) {
 	return l
 }
 
-// sendNSPPayload creates a payload out of an NSPList struct and sends it to the switch.
+// sendNSPList creates a payload out of an NSPList struct and sends it to the switch.
 func sendNSPList(l NSPList, epOut *gousb.OutEndpoint) {
 	epOut.Write([]byte("TUL0")) // Tinfoil USB List 0
 
@@ -63,15 +63,14 @@ func sendNSPList(l NSPList, epOut *gousb.OutEndpoint) {
 
 // sendNSPFiles handles sending files to the switch.
 func sendNSPFiles(l NSPList, epIn *gousb.InEndpoint, epOut *gousb.OutEndpoint, dataSize uint64) {
-	buf := make([]byte, 32)
+	buf := make([]byte, 32) // file range header
 	_, err := epIn.Read(buf)
-	fileRangeHeader := buf[:]
 	if err != nil {
 		log.Fatalf("Reading file range header failed: %v", err)
 	}
-	rangeSize := binary.LittleEndian.Uint64(fileRangeHeader[:8])
-	rangeOffset := binary.LittleEndian.Uint64(fileRangeHeader[8:16])
-	nspNameLength := binary.LittleEndian.Uint64(fileRangeHeader[16:24])
+	rangeSize := binary.LittleEndian.Uint64(buf[:8])
+	rangeOffset := binary.LittleEndian.Uint64(buf[8:16])
+	nspNameLength := binary.LittleEndian.Uint64(buf[16:24])
 	buf = buf[:0] // reset buffer (might be unneeded, left over from resolving previous issues)
 
 	buf = make([]byte, nspNameLength)
@@ -113,8 +112,8 @@ func sendNSPFiles(l NSPList, epIn *gousb.InEndpoint, epOut *gousb.OutEndpoint, d
 		log.Fatalf("Error reading NSP file: %v", err)
 	}
 
-	// readSize from https://github.com/XorTroll/Tinfoil/blob/21941dd9219149e2cc598e8a967343abffc6f883/include/data/buffered_placeholder_writer.hpp#L11
-	var currOffset, endOffset, readSize int64 = 0, int64(rangeSize), 8388608
+	// readSize from https://github.com/XorTroll/Tinfoil/blob/master/include/data/buffered_placeholder_writer.hpp#L11
+	var currOffset, endOffset, readSize int64 = 0, int64(rangeSize), 1048576
 	file.Seek(int64(rangeOffset), 0)
 	for currOffset < endOffset {
 		if currOffset+readSize >= endOffset {
@@ -127,23 +126,21 @@ func sendNSPFiles(l NSPList, epIn *gousb.InEndpoint, epOut *gousb.OutEndpoint, d
 	}
 }
 
-// sendFiles wraps around sendNSPFiles and keeps the connection open.
+// sendNSPFilesPoll wraps around sendNSPFiles and keeps the connection open.
 func sendNSPFilesPoll(l NSPList, epIn *gousb.InEndpoint, epOut *gousb.OutEndpoint) {
 	for {
-		buf := make([]byte, 32)
+		buf := make([]byte, 32) // cmdHeader
 		_, err := epIn.Read(buf)
 		if err != nil {
 			log.Fatalf("USB transfer failed: %v", err)
 		}
-		cmdHeader := buf[:]
-		magic := cmdHeader[:4] // TUC0 (Tinfoil USB Command 0)
-		fmt.Printf("Magic: %s\n", magic)
+		magic := buf[:4] // TUC0 (Tinfoil USB Command 0)
 		if !bytes.Equal(magic, []byte("TUC0")) {
 			continue
 		}
-		cmdType := cmdHeader[4:5]
-		cmdID := binary.LittleEndian.Uint32(cmdHeader[8:12])
-		dataSize := binary.LittleEndian.Uint64(cmdHeader[12:20])
+		cmdType := buf[4:5]
+		cmdID := binary.LittleEndian.Uint32(buf[8:12])
+		dataSize := binary.LittleEndian.Uint64(buf[12:20])
 		buf = buf[:0] // reset buffer (might be unneeded, left over from resolving previous issues)
 		fmt.Printf("Cmd type: %d, Command ID: %d, Data size: %d\n", cmdType, cmdID, dataSize)
 		if cmdID == cmdIDExit {
@@ -167,7 +164,7 @@ func getInOutEndpoints(intf *gousb.Interface) (in *gousb.InEndpoint, out *gousb.
 	return in, out, err
 }
 
-// getNSPListFromDirectory list NSPs in a directory and its subdirectories.
+// getNSPListFromDirectory lists NSPs in a directory and its subdirectories.
 func getNSPListFromDirectory(d string) []string {
 	if _, err := os.Stat(d); os.IsNotExist(err) {
 		log.Fatal("NSP directory/file does not exist")
