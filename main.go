@@ -196,11 +196,14 @@ func getNSPListFromDirectory(d string) []string {
 }
 
 func main() {
-	// Check args and verify path is valid
-	if len(os.Args) > 2 {
-		log.Fatalf("too many arguments: %d", len(os.Args))
+	// Check args
+	var dir string
+	if len(os.Args) == 2 {
+		dir = os.Args[1]
+	} else {
+		fmt.Println("usage ./tinfoilusbgo [path]")
+		os.Exit(1)
 	}
-	dir := os.Args[1]
 
 	// Initialize a new Context for Switch USB device
 	ctx := gousb.NewContext()
